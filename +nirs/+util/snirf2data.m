@@ -7,7 +7,7 @@ for i=1:length(snirf.nirs)
     tmpdata=nirs.core.Data;
     tmpdata(:)=[];
     for ii=1:length(snirf.nirs(i).data)
-    tmpdata(ii).data=snirf.nirs(i).data(ii).dataTimeSeries;
+    tmpdata(ii).data=snirf.nirs(i).data(ii).dataTimeSeries'; % transpose added by Peggy Skelly
     tmpdata(ii).time=snirf.nirs(i).data(ii).time;
     
     
