@@ -20,9 +20,10 @@ classdef AR_IRLS < nirs.modules.AbstractGLM
     % Note:
     %     trend_func must at least return a constant term unless all baseline periods are
     %     specified explicitly in the stimulus design with BoxCar basis functions
-    properties
+    properties(Hidden = true)
         useREML=false;
         nonstationary_noise=false;
+        useFstats=false;
     end
     methods
         function obj = AR_IRLS( prevJob )
@@ -42,6 +43,8 @@ classdef AR_IRLS < nirs.modules.AbstractGLM
             for i = 1:numel(data)
                 % get data
                 d  = data(i).data;
+                d=d-ones(size(d,1),1)*mean(d,1);
+                d=d-ones(size(d,1),1)*mean(d,1);
                 t  = data(i).time;
                 Fs = data(i).Fs;
                 
@@ -123,11 +126,16 @@ classdef AR_IRLS < nirs.modules.AbstractGLM
                         if(obj.nonstationary_noise)
                              stats = nirs.math.ar_irnsls( d, [X C], round(4*Fs) );
                         else
-                            
-                        stats = nirs.math.ar_irls( d, [X C], round(4*Fs) );
+                            if(obj.useFstats)
+                                stats = nirs.math.ar_irls_ftest( d, [X C], round(4*Fs) );
+                            else
+                                stats = nirs.math.ar_irls( d, [X C], round(4*Fs) );
+                            end
                         end
                     end
                 end
+                
+                
                 
                 if(~isempty(V1))
                     n=size(V1,2);
@@ -159,6 +167,10 @@ classdef AR_IRLS < nirs.modules.AbstractGLM
                 end
                 S(i).variables = [link table(condition,'VariableNames',{'cond'})];
                 S(i).beta = vec( stats.beta(1:ncond,:)' );
+                
+                if(obj.useFstats)
+                    S(i).pvalue_fixed=vec(stats.Fpval(1:ncond,:)' );
+                end
                 
                 covb = zeros( nchan*ncond );
                 if(ndims(stats.covb)==4)
