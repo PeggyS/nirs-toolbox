@@ -3,6 +3,7 @@ classdef MixedEffects_bootstrap < nirs.modules.MixedEffects
         number_iterations=1000;
         replacement=true;
         useparallel=false;
+        savefile = 'bb';
     end
      methods
         function obj = MixedEffects_bootstrap( prevJob )
@@ -16,18 +17,20 @@ classdef MixedEffects_bootstrap < nirs.modules.MixedEffects
              job = nirs.modules.MixedEffects;
             flds=fields(obj);
              flds2=fields(job);
-             flds=intersect(flds2,flds)
+             flds=intersect(flds2,flds);
             for i=1:length(flds)
                 job.(flds{i})=obj.(flds{i});
             end
             
-            opt = statset('UseParallel',obj.useparallel,'Display','Display','iter');
+            opt = statset('UseParallel',obj.useparallel,'Display','iter');
             
             if(obj.replacement)
-                bb=bootstrp(obj.number_iterations,@(x)job.run(x).beta,S); 
+                bb=bootstrp(obj.number_iterations,@(x)job.run(x).beta,S,'Options',opt); 
             else
-                bb=jackknife(@(x)job.run(x).beta,S); 
+                bb=jackknife(@(x)job.run(x).beta,S,'Options',opt); 
             end
+            
+            save([obj.savefile '.mat'], 'bb', '-v7.3')
            
             beta=mean(bb,1)';
             covB=cov(bb);
@@ -35,9 +38,9 @@ classdef MixedEffects_bootstrap < nirs.modules.MixedEffects
             for i=1:length(beta)
                 % this matches the one-sided T-test
                 if(beta(i)>0)
-                    pval(i,1)=length(find(bb(:,i)<=0))/size(bb,1);
+                    pval(i,1)=length(1+find(bb(:,i)<=0))/size(bb,1);
                 else
-                    pval(i,1)=length(find(bb(:,i)>0))/size(bb,1);
+                    pval(i,1)=length(1+find(bb(:,i)>0))/size(bb,1);
                 end
             end
             G=job.run(S);
