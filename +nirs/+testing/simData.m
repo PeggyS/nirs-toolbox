@@ -44,12 +44,19 @@ if nargin < 3 || isempty(beta)
     beta = 7*ones( length(stim.keys), 1 );
 elseif(isstr(beta))
     snr = str2num(beta(strfind(beta,'SNR:')+4:end));
-    beta=snr*sqrt(var(noise.data(:)));
+    if(ismember('ShortSeperation',noise.probe.link.Properties.VariableNames))
+        lst=find(~noise.probe.link.ShortSeperation);
+    else
+        lst=1:height(noise.probe.link);
+    end
+    
+    inn=nirs.math.innovations(noise.data(:,lst),8);
+    beta=snr*sqrt(var(reshape(inn,[],1)));
 end
 
 if length(beta) == length(stim.keys)
     % oxy; deoxy
-    b = [beta; -beta/2];
+    b = [beta(:)'; -beta(:)'/2];
 else
     b = beta;
 end
@@ -74,7 +81,11 @@ if nargin < 4 || isempty(channels)
     end
     sd=unique(sd,'rows');
     sd=sd(randperm(size(sd,1)),:);
-    channels = sd(1:round(end/2),:);
+    if(rand(1)>=0.5)
+        channels = sd(1:round(end/2),:);
+    else
+        channels = sd(round(end/2)+1:end,:);
+    end
 else
     if(ismember('ShortSeperation',noise.probe.link.Properties.VariableNames))
         lstSS=find(noise.probe.link.ShortSeperation);
@@ -124,7 +135,11 @@ if(~(iscellstr(link.type) && any(ismember(link.type,{'hbo','hbr'}))))
         
         % add to channels according to MBLL
         for j = 1:length(lst)
-            Yact = [Xhbo*e(j,1)*l(j) Xhbr*e(j,2)*l(j)] * b * 5/50 * 1e-6;
+            Yact=zeros(size(Xhbo,1),1);
+            for ii=1:size(Xhbo,2)
+                Yact = [Xhbo(:,ii)*e(j,1)*l(j) Xhbr(:,ii)*e(j,2)*l(j)] * b(:,ii) * 5/50 * 1e-6;
+                
+            end
             Y(:,lst(j)) = Y(:,lst(j)) + Yact;
         end
         

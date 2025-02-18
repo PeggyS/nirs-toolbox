@@ -1,4 +1,4 @@
-function varargout=draw( obj, colors, lineStyles, axis_handle )
+function varargout=draw( obj, colors, lineStyles, axis_handle)
     %% draw - Plots the probe geometry.
     % 
     % Args:
@@ -8,11 +8,10 @@ function varargout=draw( obj, colors, lineStyles, axis_handle )
     %     axis_handle - (optional) handle to axis to the plot to
         
     % sd pairs
-    if isnumeric(obj.link.type)
-        link = obj.link(obj.link.type==obj.link.type(1),1:2);
-    else
-        link = obj.link(strcmp(obj.link.type,obj.link.type(1)),1:2);
-    end
+
+    [~,unique_pairs_idx]=unique(obj.link(:,[1,2]),'rows');
+    link=obj.link(sort(unique_pairs_idx),1:2);
+
 
     s = obj.srcPos;
     d = obj.detPos;
@@ -51,6 +50,12 @@ function h=drawProbe(link, s, d, colors, lineStyles, axis_handle)
 %    axes(axis_handle);
     hold(axis_handle,'on');
     h = [];
+    ss=scatter(s(:,1),s(:,2),'filled','MarkerFaceColor','r');
+    sd=scatter(d(:,1),d(:,2),'filled','MarkerFaceColor','b');
+    set(ss,'Tag','SourceOptodes');
+    set(sd,'Tag','DetectorOptodes');
+            
+
     for iChan = 1:height(link)
         if iscell(link.source(iChan))
             iSrc = link.source{iChan};

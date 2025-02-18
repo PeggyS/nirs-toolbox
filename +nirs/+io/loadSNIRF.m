@@ -1,6 +1,13 @@
-function data = loadSNIRF(filename)
+function data = loadSNIRF(filename,verbose)
 % this function reads in a nir5 (hdf5) formated data file
 
+if(nargin<2)
+    verbose=true;
+end
+
+if(verbose)
+    disp(['Loading SNIRF file: ' filename]);
+end
 
 info=hdf5info(filename);
 
@@ -9,9 +16,15 @@ names=nirs.util.hdf5getnames(filename);
 
 array=cell(length(names),2);
 for i=1:length(names)
+   
     array{i,1}=names{i};
+    try
     array{i,2}=hdf5read(filename,names{i});
-
+    catch
+    array{i,2}=h5read(filename,names{i});
+        
+    end
+    
     array{i,3}=class(array{i,2});
     if(isa(array{i,2},'hdf5.h5string'))
         if(length(array{i,2})>1)

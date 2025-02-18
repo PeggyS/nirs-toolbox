@@ -5,7 +5,7 @@ classdef GLM < nirs.modules.AbstractGLM
     %     basis       - a Dictionary object containing temporal bases using stim name as key
     %     verbose     - flag to display progress
     %     trend_func  - a function that takes in a time vector and returns trend regressors
-    %     type        - {OLS, NIRS-SPM, or [AR-IRLS]}
+    %     type        - {OLS, NIRS-SPM, or [AR-IRLS]} 
     % Example:
     %     j = nirs.modules.GLM();
     %     j.type = 'AR-IRLS';
@@ -23,6 +23,8 @@ classdef GLM < nirs.modules.AbstractGLM
     properties
         type;
         AddShortSepRegressors = false;
+        useGPU=false;
+        precisionSingle=false;
         options;
     end
     methods
@@ -95,7 +97,7 @@ classdef GLM < nirs.modules.AbstractGLM
             switch(obj.type)
                 case('OLS')
                     j=nirs.modules.OLS(j);
-                case('AR-IRLS');
+                case('AR-IRLS')
                     j=nirs.modules.AR_IRLS(j);
                 case('NIRS-SPM')
                     j=nirs.modules.NIRS_SPM_GLM(j);
@@ -110,10 +112,13 @@ classdef GLM < nirs.modules.AbstractGLM
                 otherwise
                     error('type not recognized');
             end
+            
             j.basis=obj.basis;
             j.verbose=obj.verbose;
             j.trend_func=obj.trend_func;
             j.goforit=obj.goforit;
+            try; j.useGPU=obj.useGPU; end;
+            try; j.precisionSingle=obj.precisionSingle; end;
             
             
             if(~isempty(obj.options))
@@ -127,8 +132,13 @@ classdef GLM < nirs.modules.AbstractGLM
             if (obj.AddShortSepRegressors)
                 Stim=unique(nirs.getStimNames(data));
                 for ii=1:length(Stim)
-                    Stim{ii}=['^' Stim{ii} '$'];
-                end
+
+%<<<<<<< shortsep-roc-error
+%                    Stim{ii}=['^' Stim{ii} '$'];
+%=======
+                    Stim{ii}=['\<' Stim{ii} '*'];
+%>>>>>>> master
+                end  
                 
                 j=nirs.modules.KeepStims(j);
                 j.regex=true;
@@ -149,7 +159,9 @@ classdef GLM < nirs.modules.AbstractGLM
                     if(~isempty(strfind(ss,':')))
                         ss(strfind(ss,':'):end)=[];
                     end
-                    
+                    if(ss(1)=='x' & ~ismember(ss,data(idx).stimulus.keys))
+                        ss(1)=[];
+                    end
                     st=data(idx).stimulus(ss);
                     if(~ismember('regressor_no_interest',fields(st)))
                         lst=[lst j];
@@ -177,13 +189,34 @@ classdef GLM < nirs.modules.AbstractGLM
                 end
                 SS=unique(SS);
                 for ii=1:length(SS)
+%<<<<<<< shortsep-roc-error
                     SS{ii}=['^' SS{ii} '$'];
+%=======
+%                    SS{ii}=[SS{ii} '+'];
+%>>>>>>> master
                 end
                 
                 j=nirs.modules.KeepStims;
                 j.listOfStims=SS;
                 j.regex=true;
                 S(idx)=j.run(S(idx));
+
+                if(isa(obj.basis('default'),'nirs.design.basis.Canonical') && ...
+                        obj.basis('default').incDeriv && ~obj.basis('default').keepDerivs)
+                    ListChanges={};
+                    ListTests={};
+                    for i=1:length(StimNew)
+                        if(contains(StimNew{i},':01'))
+                            ListChanges{end+1}=strrep(StimNew{i},':01','');
+                            ListTests{end+1}=[strrep(StimNew{i},':01','') '[1]'];
+                        end
+                    end
+                    desc=S(idx).description;
+                    S(idx)=S(idx).ttest(ListTests,[],ListChanges);
+                    S(idx).description=desc;
+                end
+
+
             end
             
             

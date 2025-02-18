@@ -21,11 +21,12 @@ idx4=find(ismember(lower(tbl1020.Name),'nas'));
 idx5=find(ismember(lower(tbl1020.Name),'iz'));
 
 for i=1:headsize.count
-    val=headsize(keys{i});
+    val=double(headsize(keys{i}));
     str=lower(keys{i});
     str(strfind(str,' '))=[];
         
-    if(~isempty(strfind(str,'circ')))
+    if(~isempty(strfind(str,'circ')) || ...
+            ~isempty(strfind(str,'circumference')))
             %a=obj.LR_distance/2;
             %b=obj.AP_distance/2;
            
@@ -52,23 +53,14 @@ for i=1:headsize.count
           XYZ(idx3,:)-.5*(XYZ(idx1,:)-XYZ(idx2,:));
           cost{i}=@(s)abs(arcdistance(.5*norm(s.*a),norm(s.*b))-val);
     else
-        warning('head size key not recognized');
+%        warning('head size key not recognized');
     end        
 end
 
-% 
-% 
-%     cost=@(dx)mask.*reshape(abs(squareform(pdist(pos+reshape(dx,size(pos))))-idealdist),[],1);
-%     opt = optimset('MaxFunEvals', 1000,'Display','off');
-%     x=lsqnonlin(cost,dx,[],[],opt);
-% else
-%     cost=@(dx)mad(mask.*reshape(abs(squareform(pdist(pos+reshape(dx,size(pos))))-idealdist),[],1));
-%     opt = optimoptions('lsqnonlin', 'MaxFunEvals', 1000,'Display','off');
-%     x=fminsearch(cost,dx,opt);
-% end
 
 if(~isempty(ver('optim')))
     opt = optimoptions('lsqnonlin', 'MaxFunEvals', 1000,'Display','off');
+   
     if(headsize.count>2)
         cstfcn=@(x)vertcat(cell2mat(cellfun(@(a){a(x)},cost)'));
         s=lsqnonlin(cstfcn,[1 1 1],[.5 .5 .5],[2 2 2],opt);

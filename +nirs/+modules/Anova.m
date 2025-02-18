@@ -9,6 +9,9 @@ classdef Anova < nirs.modules.AbstractModule
         verbose = false;
         dummyCoding = 'full';
     end
+    properties(Hidden=true)
+        conditional_tests ={}
+    end
     
     methods
         function obj = Anova( prevJob )
@@ -118,6 +121,11 @@ classdef Anova < nirs.modules.AbstractModule
                 end
             end
             
+            if(~isempty(obj.conditional_tests))
+                vars=nirs.design.add_conditional_table_items(vars,obj.conditional_tests);
+            end
+
+
             tmp = vars(lst == 1, :);
             
             beta = randn(size(tmp,1), 1);
@@ -215,7 +223,7 @@ classdef Anova < nirs.modules.AbstractModule
             G.F=[];
             G.df1=[];
             G.df2=[];
-            lme2 = fitlmematrix(X(:,lstKeep),beta, Z,[], 'dummyVarCoding',...
+            lme2 = fitlmematrix(full(X(:,lstKeep)),beta, full(Z),[], 'dummyVarCoding',...
                 obj.dummyCoding, 'FitMethod', 'ML', 'CovariancePattern', repmat({'Isotropic'},nRE,1));
             
             a=lme2.anova();

@@ -23,14 +23,17 @@ function [S,haserror] = ttest(obj, c, b, names)
     
      if(isstr(c) | iscellstr(c))
      if(contains(c,'*'))
-         str2={};
-         for i=1:length(obj.conditions)
-             a=regexp(obj.conditions{i},c);
-             if~isempty(a)
-                 str2{end+1}=obj.conditions{i};
-             end
-         end
-         c=str2;
+       
+
+            str2={};
+            for i=1:length(obj.conditions)
+                a=regexp(obj.conditions{i},c);
+                if~isempty(a)
+                    str2{end+1}=obj.conditions{i};
+                end
+            end
+            c=str2;
+
      end
      
      end
@@ -93,11 +96,15 @@ function [S,haserror] = ttest(obj, c, b, names)
     end
     obj = sorted(obj);
     
+    lstGood=find(~isnan(obj.beta));
+    lstHasValues = find(sum(abs( C(:,lstGood)),2)>0);
     % transform beta
-    beta = bsxfun(@minus, C*obj.beta, b);
+    beta=NaN(size(C,1),1);
+    beta(lstHasValues) = bsxfun(@minus, C(lstHasValues,lstGood)*obj.beta(lstGood), b(lstHasValues));
 
     % new covariance
-    covb = C*obj.covb*C';
+    covb=NaN(size(C,1));
+    covb(lstHasValues,lstHasValues) = C(lstHasValues,lstGood)*obj.covb(lstGood,lstGood)*C(lstHasValues,lstGood)';
 
     % output
     S = obj;

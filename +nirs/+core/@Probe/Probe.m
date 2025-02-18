@@ -119,8 +119,10 @@ classdef Probe
 %             srcPos=[tbl.X(lst) tbl.Y(lst) tbl.Z(lst)];
 %             
 %              %Convert to mm if needed
-%             lstCM=find(ismember(tbl.Units(lst),{'cm'}));
-%             srcPos(lstCM,:)=srcPos(lstCM,:)*10;
+            lstCM=find(ismember(tbl.Units(lst),{'cm'}));
+            srcPos(lstCM,:)=srcPos(lstCM,:)*10;
+            lstCM=find(ismember(tbl.Units(lst),{'m','meter'}));
+            srcPos(lstCM,:)=srcPos(lstCM,:)*1000;
         end
         
         function detPos = get.detPos(obj)
@@ -152,8 +154,10 @@ classdef Probe
 %             detPos=[tbl.X(lst) tbl.Y(lst) tbl.Z(lst)];
 %             
 %             %Convert to mm if needed
-%             lstCM=find(ismember(tbl.Units(lst),{'cm'}));
-%             detPos(lstCM,:)=detPos(lstCM,:)*10;
+             lstCM=find(ismember(tbl.Units(lst),{'cm'}));
+             detPos(lstCM,:)=detPos(lstCM,:)*10;
+             lstCM=find(ismember(tbl.Units(lst),{'m','meter'}));
+             detPos(lstCM,:)=detPos(lstCM,:)*1000;
         end
         
         function d = get.distances( obj )
@@ -182,7 +186,10 @@ classdef Probe
                     d(i,1) = mean(sqrt(sum(vec.^2,2)));
                 end
             else
-                vec = obj.srcPos(isrc,:) - obj.detPos(idet,:);
+                % only get source/detector pairs from link table
+                validSrcPairs = (isrc>0.&idet>0);
+
+                vec = obj.srcPos(isrc(validSrcPairs),:) - obj.detPos(idet(validSrcPairs),:);
                 d = sqrt( sum( vec.^2,2 ) );
             end
             

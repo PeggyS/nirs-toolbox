@@ -21,13 +21,15 @@ classdef DiscardStims < nirs.modules.AbstractModule
             disc=[];
             % loop through and remove stims
             for i = 1:numel(data)
-                if(isa(data(i),'nirs.core.Data') | isa(data(i),'eeg.core.Data'))
+                if(isa(data(i),'nirs.core.Data') | isa(data(i),'eeg.core.Data') | isa(data(i),'nirs.core.GenericData'))
                     data(i).stimulus = data(i).stimulus.remove( obj.listOfStims );
                 elseif(isa(data(i),'nirs.core.sFCStats'))
                     cond=data(i).conditions;
                     lst=find(~ismember(cond,obj.listOfStims));
                     data(i).R=data(i).R(:,:,lst);
-                    data(i).dfe=data(i).dfe(lst);
+                    if(length(data(i).dfe)>1)
+                        data(i).dfe=data(i).dfe(lst);
+                    end
                     data(i).conditions={data(i).conditions{lst}};
                 else
                     cond=data(i).conditions;

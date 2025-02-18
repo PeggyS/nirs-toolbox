@@ -22,6 +22,9 @@ classdef MixedEffects < nirs.modules.AbstractModule
         verbose=false;
         use_nonparametric_stats=false;
     end
+    properties(Hidden=true)
+        conditional_tests ={}
+    end
     
    
     methods
@@ -144,7 +147,30 @@ classdef MixedEffects < nirs.modules.AbstractModule
             
             nRE=max(1,length(strfind(obj.formula,'|')));
             warning('off','stats:LinearMixedModel:IgnoreCovariancePattern');
-            
+
+            conds=unique(tmp.cond);
+            for i=1:length(conds);
+                tmp.(conds{i})=1*ismember(tmp.cond,conds{i});
+            end;
+
+            if(~isempty(obj.conditional_tests))
+                tmp=nirs.design.add_conditional_table_items(tmp,obj.conditional_tests);
+            end
+
+            NoInter=[];
+            if(~isempty(strfind(obj.formula,'{')))
+                % the formula has variables of no interest
+                lstt=sort([strfind(obj.formula,'{') strfind(obj.formula,'}')]);
+                cnt=1;
+                for ii=1:2:length(lstt)
+                NoInter{cnt}=obj.formula([lstt(ii)+1:lstt(ii+1)-1]);
+                cnt=cnt+1;
+                end
+                obj.formula=strrep(obj.formula,'{',' ');
+                obj.formula=strrep(obj.formula,'}',' ');
+            end
+
+
             obj.formula=nirs.util.verify_formula([table(beta) tmp], obj.formula,true);
             respvar = obj.formula(1:strfind(obj.formula,'~')-1);
             
@@ -233,6 +259,7 @@ classdef MixedEffects < nirs.modules.AbstractModule
             
             if(obj.weighted)
                 %% check weights
+                
                 dWTW = sqrt(diag(W'*W));
                 
                 % Edit made 3/20/16-  Treat each modality seperately.  This
@@ -248,7 +275,8 @@ classdef MixedEffects < nirs.modules.AbstractModule
                     %W(dWTW > 100*m,:) = 0;
                     lstBad=[lstBad; find(dWTW(lst) > 100*m)];
                 end
-                
+                lstBad=[lstBad; find(any(isnan(beta),2))];
+                lstBad=unique(lstBad);
                 W(lstBad,:)=[];
                 W(:,lstBad)=[];
                 X(lstBad,:)=[];
@@ -285,11 +313,17 @@ classdef MixedEffects < nirs.modules.AbstractModule
                 tic;
             end
             
+           
+            
             [Coef,bHat,CovB,LL,w] = nirs.math.fitlme(X(:,lstKeep),beta,Z,obj.robust,false,obj.verbose);
             % this gives the same results as the built in matlab code,
             % however, mine is MUCH faster (at N=22; mine=18s vs matlab=>160s 
             % lme2=fitlmematrix(X(:,lstKeep),beta,Z,[],'dummyVarCoding',obj.dummyCoding, 'FitMethod', 'ML', 'CovariancePattern', repmat({'Isotropic'},nRE,1));
-        
+            [ii,jj]=find(isnan(X(:,lstKeep)));
+            ii=unique(ii);
+            w2=w; w2(ii)=[]; X2=X(:,lstKeep); X2(ii,:)=[];
+            A=diag(w2)*X2;
+            ra=condest(A'*A);
             
             if(obj.use_nonparametric_stats)
                disp('Running permutation testing for non-parametric statistics');
@@ -307,6 +341,10 @@ classdef MixedEffects < nirs.modules.AbstractModule
                     end
                     [CoefNull(:,iter),~,~,~,~] = nirs.math.fitlme(W*Xnull,...
                         beta(randperm(length(beta))),Z,obj.robust,false,obj.verbose);
+                    
+                    % [CN(:,iter),~,~,~,~] = nirs.math.fitlme(W*Xnull,...
+                    %     beta,Z,obj.robust,false,obj.verbose);
+
                 end;
             end
             
@@ -325,12 +363,14 @@ classdef MixedEffects < nirs.modules.AbstractModule
             cnames = repmat(cnames, [nchan 1]);
             
             %% output
-            G.beta=zeros(size(X,2),1);
+            G.beta=nan(size(X,2),1);
             G.covb=1E6*eye(size(X,2)); %make sure anything not fit will have high variance
             
             G.beta(lstKeep) = Coef;
+            %G.beta(end+1)=ra;  
+%            warning('remove MixedEffects line 334');
             G.covb(lstKeep,lstKeep) = CovB;
-            G.dfe        = lm1.DFE;
+            G.dfe        = lm1.DFE; 
             
             %             [U,~,~]=nirs.math.mysvd(full([X(:,lstKeep) Z]));
             %             G.dfe=length(beta)-sum(U(:).*U(:));
@@ -338,6 +378,8 @@ classdef MixedEffects < nirs.modules.AbstractModule
             G.probe      = S(1).probe;
             
             G.WhiteningW=W;
+            
+            G.tag.cond=ra;
             
             if(~ismember('source',vars.Properties.VariableNames) & ...
                     ismember('ROI',vars.Properties.VariableNames))
@@ -363,6 +405,9 @@ classdef MixedEffects < nirs.modules.AbstractModule
                     b{cnt}=S(i).basis.stim.values{j};
                     cnt=cnt+1;
                 end
+            end
+            if(isstring(n{1}))
+                n=cellstr(n);
             end
             [~,j]=unique(n);
             G.basis=S(1).basis;
@@ -392,7 +437,11 @@ classdef MixedEffects < nirs.modules.AbstractModule
                 G.categoricalvariableInfo=lm1.VariableInfo(lm1.VariableInfo.InModel,:);
                 
                 vars=G.variables;
-                [sd, ~,lst] = nirs.util.uniquerows(table(vars.source, vars.detector, vars.type));
+                if(isa(G.probe,'nirs.core.ProbeROI'))
+                    [sd, ~,lst] = nirs.util.uniquerows(table(vars.ROI, vars.type));
+                else
+                    [sd, ~,lst] = nirs.util.uniquerows(table(vars.source, vars.detector, vars.type));
+                end
                 models=cell(height(G.variables),1);
                 for idx=1:max(lst)
                     ll=find(lst == idx);
@@ -410,8 +459,8 @@ classdef MixedEffects < nirs.modules.AbstractModule
 %                     end
                     s{end+1}='beta';
                     
-                    %lme2=fitlm(X(:,lstKeep([ll; nll])),yproj,'Intercept',false,'VarNames',s');
-                    lme2=fitlm(X(:,lstKeep(ll)),yproj,'Intercept',false,'VarNames',s');
+%                     lme2=fitlm(X(:,lstKeep([ll; nll])),yproj,'Intercept',false,'VarNames',s');
+                    lme2=fitlm(full(X(:,lstKeep(ll))),yproj,'Intercept',false,'VarNames',s');
                     
                     id=find(ismember(G.variables,vars(ll,:)));
                     for j=1:length(id)
@@ -423,10 +472,58 @@ classdef MixedEffects < nirs.modules.AbstractModule
                 
             end
             
-            
+            %Remove variables of no interest
+            if(~isempty(NoInter))
+                
+                PredictorNames=lm1.PredictorNames;
+
+                for idd=1:length(PredictorNames);
+                    if(~isnumeric(tmp.(PredictorNames{idd})))
+                        upred=unique(tmp.(PredictorNames{idd}));
+                        NoInter=repmat(NoInter,length(upred)*2,1);
+                        for ii=1:length(upred)
+                            for jj=1:size(NoInter,2)
+                                NoInter{ii,jj}=strrep(NoInter{ii,jj},PredictorNames{idd},upred{ii});
+                            end
+                        end
+                        for ii=1:length(upred)
+                            for jj=1:size(NoInter,2)
+                                NoInter{ii+length(upred),jj}=strrep(NoInter{ii+length(upred),jj},PredictorNames{idd},[PredictorNames{idd} '_' upred{ii}]);
+                            end
+                        end
+                        NoInter=unique(NoInter(:));
+                    end
+                end
+                
+
+
+                cnames=unique(cnames);
+                remove={};
+                for i=1:length(NoInter); 
+                    ss=strsplit(NoInter{i},':'); 
+                    for jj=1:length(cnames)
+                        flag=true;
+                        for ii=1:length(ss)
+                            flag=flag & contains(cnames{jj},ss{ii});
+                        end
+                        if(flag)
+                            remove{end+1}=cnames{jj};
+                            disp(['Removing condition of no interest: ' remove{end}]);
+                        end
+                    end
+                end;
+                if(~isempty(remove))
+                    job=nirs.modules.DiscardStims;
+                    job.listOfStims=remove;
+                    G=job.run(G);
+
+                end
+            end
+
         end
     end
     
 end
+
 
 

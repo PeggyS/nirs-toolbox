@@ -32,6 +32,10 @@ classdef Data
         Fs = 0;             % sampling frequency in Hz
     end
 
+     properties (Hidden = true )
+         UserData;
+     end
+
     methods
         function obj = Data( data, time, probe, Fm, stimulus, demographics, description )
             %% Data - Creates a Data object.
@@ -166,7 +170,7 @@ classdef Data
                 
             end
             if(nargin<3 || isempty(adderr))
-                adderr=false;
+                adderr=true;
             end
             
             if(isempty(lstChannels))
@@ -256,11 +260,19 @@ classdef Data
             
             % plot data
             if(~isreal(d) & adderr)
-                h=errorbar(axis_handle, t, real(d),imag(d) );
+                for ii=1:size(d,2)
+                    h(ii,:)=errorbar(axis_handle, t, real(d(:,ii)),imag(d(:,ii)) );
+                end
             else
                 h=plot(axis_handle, t, real(d) );
             end
             xlabel(axis_handle, 'seconds' );
+            
+            if(ismember('units',obj.probe.link.Properties.VariableNames))
+                ylabel(obj.probe.link.units{1});
+            end
+            
+            
             for i = 1:length(obj.stimulus.keys)
                 legend(axis_handle,obj.stimulus.keys)
             end

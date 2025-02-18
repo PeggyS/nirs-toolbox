@@ -22,7 +22,7 @@ function varargout = StimUtil_GUI(varargin)
 
 % Edit the above text to modify the response to help StimUtil_GUI
 
-% Last Modified by GUIDE v2.5 28-Aug-2019 12:37:32
+% Last Modified by GUIDE v2.5 18-Jun-2024 19:37:50
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -88,6 +88,8 @@ for i=1:length(raw)
         % NIRx data
         lst=strfind(raw(i).description,filesep);
         Filenames{i}=raw(i).description(lst(end-2)+1:lst(end)-1);
+    elseif(~isempty(raw(i).description))
+        Filenames{i}=raw(i).description;
     else
         
         Filenames{i}=['File-' num2str(i)];
@@ -120,7 +122,7 @@ idx=get(handles.listbox1,'Value');
 stimevent = raw(selected).stimulus(stimnames{idx});
 C={};
 for i=1:length(stimevent.onset)
-    C{i,1}=stimevent.name;
+    C{i,1}=char(stimevent.name);
     C{i,2}=stimevent.onset(i);
     C{i,3}=stimevent.amp(i);
     C{i,4}=num2str(stimevent.dur(i));
@@ -393,9 +395,11 @@ if(isempty(C))
     C=cell(1,4); 
 end
 
-d=eventdata.EditData;
-if(~isempty(str2num(d))) d=str2num(d); end;
-C{eventdata.Indices(1),eventdata.Indices(2)}=d;
+if(isfield(eventdata,'EditData'))
+    d=eventdata.EditData;
+    if(~isempty(str2num(d))) d=str2num(d); end;
+    C{eventdata.Indices(1),eventdata.Indices(2)}=d;
+end
 for i=1:size(C,1)
     if(~isempty(C{i,2}) & ...
             ~isempty(C{i,3}) & ~isempty(C{i,4}))
@@ -670,10 +674,12 @@ for i=1:length(unames)
     lstAmp=find(ismember(header{1},[unames{i} '_amplitude']));
    
     for j=3:length(a{lstOn})
+        if(~isempty(str2num(a{lstAmp}{j})))
         C{end+1,1}=unames{i};
         C{end,2}=a{lstOn}{j};
         C{end,3}=str2num(a{lstAmp}{j});
         C{end,4}=a{lstDur}{j};
+        end
     end
     
 end
@@ -745,22 +751,22 @@ for j=1:length(keys)
     
     st=raw(selected).stimulus(keys{j});
     if(isa(st,'nirs.design.StimulusEvents'))
-        Array{1,j+3*(j-1)}=[keys{j} '_onset'];
-        Array{1,j+1+3*(j-1)}=[keys{j} '_duration'];
-        Array{1,j+2+3*(j-1)}=[keys{j} '_amplitude'];
+        Array{1,1+3*(j-1)}=[keys{j} '_onset'];
+        Array{1,2+3*(j-1)}=[keys{j} '_duration'];
+        Array{1,3+3*(j-1)}=[keys{j} '_amplitude'];
         
         for k=1:length(st.onset)
-            Array{1+k,j+3*(j-1)}=st.onset(k);
-            Array{1+k,j+1+3*(j-1)}=st.dur(k);
-            Array{1+k,j+2+3*(j-1)}=st.amp(k);
+            Array{1+k,1+3*(j-1)}=st.onset(k);
+            Array{1+k,2+3*(j-1)}=st.dur(k);
+            Array{1+k,3+3*(j-1)}=st.amp(k);
         end
     elseif(isa(st,'nirs.design.StimulusVector'))
-        Array{1,j+3*(j-1)}=[keys{j} '_vector'];
-        Array{1,j+1+3*(j-1)}=[keys{j} '_time'];
+        Array{1,1+3*(j-1)}=[keys{j} '_vector'];
+        Array{1,2+3*(j-1)}=[keys{j} '_time'];
         
         for k=1:length(st.vector)
-            Array{1+k,j+3*(j-1)}=st.vector(k);
-            Array{1+k,j+1+3*(j-1)}=st.time(k);
+            Array{1+k,1+3*(j-1)}=st.vector(k);
+            Array{1+k,2+3*(j-1)}=st.time(k);
         end
         
     end
@@ -959,3 +965,34 @@ st=nirs.design.StimulusEvents;
 raw(selected).stimulus('New Event')=st;
 set(handles.figure1,'UserData',raw);
 StimUtil_GUI('updateDraw');
+
+
+% --------------------------------------------------------------------
+function AddParametricModel_Callback(hObject, eventdata, handles)
+% hObject    handle to AddParametricModel (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+prompt={'Enter formula (e.g. ?*(1+time) )','Center Variables?'};
+name='Create Parametric Model';
+numlines=1;
+defaultans={'?*(1+time)','true'};
+answer=inputdlg(prompt,name,numlines,defaultans);
+
+if(ismember(lower(answer{2}),{'true','1','yes'}))
+    center=true;
+else
+    center=false;
+end
+
+raw=get(handles.figure1,'UserData');
+
+try;
+    raw=nirs.design.split_parametric(raw,answer{1},center);
+    set(handles.figure1,'UserData',raw);
+    StimUtil_GUI('updateDraw');
+catch
+    disp(lasterr);
+end
+
+return

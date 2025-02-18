@@ -1,4 +1,4 @@
-function [stats,resid] = ar_irls( d,X,Pmax,tune,nosearch)
+function [stats,resid] = ar_irls( d,X,Pmax,tune,nosearch,useGPU, singlePrecision)
 % See the following for the related publication: 
 % http://www.ncbi.nlm.nih.gov/pmc/articles/PMC3756568/
 %
@@ -54,6 +54,13 @@ function [stats,resid] = ar_irls( d,X,Pmax,tune,nosearch)
     end
     if(nargin<5)
         nosearch=false;
+    end
+    if(nargin<6)
+        useGPU=false;
+    end
+
+    if(nargin<7)
+        singlePrecision=false;
     end
        
     % preallocate stats
@@ -169,16 +176,65 @@ function [stats,resid] = ar_irls( d,X,Pmax,tune,nosearch)
        % stats.dfe = length(yf)-sum(U(:).*U(:));
         stats.dfe = sum(S.w)-sum(U(:).*U(:));
         
-        %  Satterthwaite estimate of model DOF
-        H=diag(S.w)-wXf*pinv(wXf'*wXf)*wXf';
+        
+        
         % note trace(A*B) = sum(reshape(A,[],1).*reshape(B',[],1)); 
-        HtH=H'*H;
-        stats.dfe =sum(reshape(H,[],1).*reshape(H',[],1))^2/sum(reshape(HtH,[],1).^2);
+        
+
+        if(useGPU)
+            
+            %  Satterthwaite estimate of model DOF
+            if(singlePrecision)
+                g_Sw=gpuArray(single(S.w));
+                g_wXf=gpuArray(single(wXf));
+            else % double precision
+                g_Sw=gpuArray(S.w);
+                g_wXf=gpuArray(wXf);
+            end
+
+            gpuH=diag(g_Sw)-g_wXf*pinv(g_wXf'*g_wXf)*g_wXf';
+            gpuHtH = gpuH' * gpuH;  
+
+            % This order clears up memory using inplace insertion for
+            % variables
+            clear gpuH
+
+            % Lower/denominator
+            gpuHtH_sumsq=sum(reshape(gpuHtH,[],1).^2);
+            clear gpuHtH
+            
+            % Upper/numerator
+            gpuH=diag(g_Sw)-g_wXf*pinv(g_wXf'*g_wXf)*g_wXf';
+            gpuH_upper=sum(reshape(gpuH,[],1).*reshape(gpuH',[],1))^2;
+            clear gpuH
+
+            stats.dfe =gather(gpuH_upper/gpuHtH_sumsq);
+
+            %stats.dfe =gather(sum(reshape(gpuH,[],1).*reshape(gpuH',[],1))^2/sum(reshape(gpuHtH,[],1).^2));
+            
+        else
+            %  Satterthwaite estimate of model DOF
+            if(singlePrecision)
+                sSw=single(S.w);
+                swXF=single(wXf);
+                H=diag(sSw)-swXF*pinv(swXF'*swXF)*swXF';
+                HtH=H'*H;
+            else % double precision
+                H=diag(S.w)-wXf*pinv(wXf'*wXf)*wXf';
+                HtH=H'*H;
+            end
+            
+            stats.dfe =sum(reshape(H,[],1).*reshape(H',[],1))^2/sum(reshape(HtH,[],1).^2);
+
+        end
+
+        
+        
         %stats.dfe = trace(H'*H)^2/trace(H'*H*H*H');  % same result but 4-6x slower
         
         % moco data & statistics
         stats.beta(:,i) = B;
-               stats.P(i) = length(a)-1;
+        stats.P(i) = length(a)-1;
         
         L = pinv(Xf'*Xf); % more stable
         Xfall{i}=nan(length(y),size(wXf,2));
@@ -198,9 +254,9 @@ function [stats,resid] = ar_irls( d,X,Pmax,tune,nosearch)
         resid(lstValid,i)=S.resid.*S.w; 
         
         stats.filter{i}=f;
-        sse =  norm(yf - Xf*B)^2;
+        sse =  norm(yf(lstValid) - Xf*B)^2;
          
-        sst =  norm(yf - mean(yf))^2;
+        sst =  norm(yf(lstValid) - mean(yf(lstValid)))^2;
         stats.R2(i)=1-sse./sst;
         
         N=length(y)-size(B,2)-stats.P(i);
@@ -211,18 +267,24 @@ function [stats,resid] = ar_irls( d,X,Pmax,tune,nosearch)
         
     end   
    
-    covb=zeros(size(stats.beta,1),size(stats.beta,1),size(stats.beta,2),size(stats.beta,2));
      
-    
-    for i=1:size(stats.beta,2)
-        for j=1:size(stats.beta,2)
-            a=resid(:,i)-nanmedian(resid(:,i));
-            b=resid(:,j)-nanmedian(resid(:,j));
-            
-            C(i,j)=1.4810*nanmedian(a.*b);  % var(x) = 1.4810 * MAD(x,1)
+    resid=resid-ones(size(resid,1),1)*nanmedian(resid,1);
+    if(size(resid,2)>400)
+        C=resid'*resid;
+    else
+        for i=1:size(stats.beta,2)
+            for j=i:size(stats.beta,2)
+                a=resid(:,i);
+                b=resid(:,j);
+                C(i,j)=1.4810*nanmedian(a.*b);  % var(x) = 1.4810 * MAD(x,1)
+                C(j,i)=C(i,j);
+            end
+
         end
     end
     C=C*(nanmean(stats.sigma2'./diag(C)));   %fix the scaling due to the dof (which is a bit hard to track because it changes per channel, so use the average)
+    
+    covb=zeros(size(stats.beta,1),size(stats.beta,1),size(stats.beta,2),size(stats.beta,2));
     
 
     for i=1:size(stats.beta,2)
@@ -233,14 +295,16 @@ function [stats,resid] = ar_irls( d,X,Pmax,tune,nosearch)
         end
     end
     covb=covb/2;
+
     
+%     
 %     figure(1); cla; d=[];
 %     for i=1:32; d(i)=squeeze(covb(2,2,i,i)); end;
 %     plot(log(squeeze(stats.covb(2,2,:))),'b')
 %     hold on;
 %     plot(log(d),'r--')
 %     pause;
-    
+%     
     stats.covb = real(covb);
 % 
 %     for i=1:size(stats.beta,2)

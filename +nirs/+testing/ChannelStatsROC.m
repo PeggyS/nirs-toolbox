@@ -64,8 +64,12 @@ classdef ChannelStatsROC
 
     properties
         simfunc  = @nirs.testing.simData
+        dataset
         artfunc
         pipeline
+    end
+    properties(Hidden = true)
+        beta
     end
     
     properties (SetAccess = protected)
@@ -74,6 +78,7 @@ classdef ChannelStatsROC
        types
     end
     
+
     methods
         % constructor
         function obj = ChannelStatsROC( pipeline, simfunc )
@@ -95,8 +100,26 @@ classdef ChannelStatsROC
         end
         
         function obj = run(obj, iter)
+            if ~isempty(obj.dataset)
+                if (~ismember('data', fieldnames(obj.dataset)))
+                    error('No data feild in dataset!')
+                end
+                if (~ismember('truth', fieldnames(obj.dataset)))
+                    error('No truth feild in dataset!')
+                end
+                if (iter > length(obj.dataset.data))
+                    warning('Requested number of iterations is greater than data size. Discard excessive iterations.');
+                    iter = length(obj.dataset.data);
+                end
+            end
             for idx = 1:iter
-               [data, truth] = obj.simfunc();
+                if ~isempty(obj.dataset)
+                    data = obj.dataset.data(idx);
+                    truth = obj.dataset.truth(:, idx);
+                else
+                    [data, truth] = obj.simfunc();
+                end
+               
                if ~isempty(obj.artfunc)
                    data = obj.artfunc(data);
                end
@@ -115,12 +138,14 @@ classdef ChannelStatsROC
                
                T=[];
                P=[];
+               B=[];
                Types={};
                
                for i=1:length(obj.pipeline)
                    truth = truth_save;
                    if(iscell(obj.pipeline))
                        stats = obj.pipeline{i}.run(data);
+                       
                    else
                     stats = obj.pipeline(i).run(data);
                    end
@@ -132,6 +157,11 @@ classdef ChannelStatsROC
                            job=nirs.modules.RemoveShortSeperations;
                            stats=job.run(stats);
                        end
+                   end
+                   
+                   if ~isempty(strfind(stats(1).variables.cond,'Aux'))
+                       job=nirs.modules.RemoveAuxFromStats;
+                       stats=job.run(stats);
                    end
                    
                    if(length(truth)>height(data(1).probe.link))
@@ -148,9 +178,9 @@ classdef ChannelStatsROC
                    % multivariate joint hypothesis testing
                    fstats = stats.jointTest();
                    
-                   t = []; p = [];
+                   t = []; p = []; betas=[];
                    for j = 1:length(types)
-                       if(iscellstr(types(i)))
+                       if(iscellstr(types(j)))
                        lst = strcmp(types(j), stats.variables.type);
                        else
                            lst = find(types(j)==stats.variables.type);
@@ -158,6 +188,9 @@ classdef ChannelStatsROC
                        
                        t(:,j) = truth(lst);
                        p(:,j) = stats.p(lst);
+          
+                       betas(:,j)=stats.tstat(lst); %stats.beta(lst);
+
                    end
                    if(~iscellstr(types(1)))
                         for i=1:length(types)
@@ -192,13 +225,14 @@ classdef ChannelStatsROC
                    
                    T=[T t];
                    P=[P p];
+                   B=[B betas];
                    Types={Types{:} types{:}};
                    
                end
                
                obj.truth = [obj.truth; T];
                obj.pvals = [obj.pvals; P];
-               
+               obj.beta=[obj.beta; B];
                obj.types = Types;
             
                disp( ['Finished iter: ' num2str(idx)] )
@@ -315,6 +349,7 @@ classdef ChannelStatsROC
             obj.truth=[];
             obj.pvals=[];
             obj.types={};
+            obj.beta=[];
         end
         
         function out = sensitivity( obj, pval )

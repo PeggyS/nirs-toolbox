@@ -33,6 +33,7 @@ stim_keys=matlab.lang.makeValidName(stim_keys);
 X = []; names = {};
 for iKey = 1:length(stim_keys)
     
+    if(~isempty(stim_vals{iKey}))
     % get stim vector
     stimVector = stim_vals{iKey}.getStimVector( t );
     
@@ -106,9 +107,9 @@ for iKey = 1:length(stim_keys)
             end
         else
             if basis.iskey( {stim_keys{iKey},type} );
-                basisObj = basis( {{stim_keys{iKey},type}} );
+                basisObj = basis( {stim_keys{iKey},type} );
             elseif basis.iskey({'default',type})
-                basisObj = basis( {{'default',type}} );
+                basisObj = basis( {'default',type} );
             else
                 basisObj = basis( 'default' );
             end
@@ -165,6 +166,7 @@ for iKey = 1:length(stim_keys)
     end
     X=setfield(X,stim_keys{iKey},x);
     %X = [X x];
+    end
 end
 
 names = names';
@@ -175,6 +177,7 @@ try;
     X=struct2array(X);
 catch
     X=struct2table(X);
+    X = table2array(X);
 end
 
 

@@ -37,7 +37,7 @@ classdef lslStream < handle
         
         function start(obj)
             if(~isempty(obj.LSLdata_StreamName))
-                result = lsl_resolve_byprop(obj.liblsl,'type',obj.LSLdata_StreamName,1,obj.timeout);
+                result = lsl_resolve_byprop(obj.liblsl,'name',obj.LSLdata_StreamName,1,obj.timeout);
                 if(~isempty(result))
                     obj.LSLdata_Stream = lsl_inlet(result{1});
                     disp('Now receiving chunked data...');
@@ -49,7 +49,7 @@ classdef lslStream < handle
                 end
             end
             if(~isempty(obj.LSLmarker_StreamName))
-                result = lsl_resolve_byprop(obj.liblsl,'type',obj.LSLmarker_StreamName,1,obj.timeout);
+                result = lsl_resolve_byprop(obj.liblsl,'name',obj.LSLmarker_StreamName,1,obj.timeout);
                 if(~isempty(result))
                     obj.LSLmarker_Stream = lsl_inlet(result{1});
                 else
